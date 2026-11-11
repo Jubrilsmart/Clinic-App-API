@@ -61,7 +61,7 @@ const BOOKING_WINDOW_MS = 60_000;
 const MAX_ATTEMPTS_PER_MINUTE = 5;
 
 export class BookingRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   async resetSlots(slots: Slot[]): Promise<void> {
     await this.prisma.$transaction(async (transaction) => {
@@ -81,7 +81,12 @@ export class BookingRepository {
 
   async listSlots(provider?: string): Promise<SlotWithAvailability[]> {
     const slots = await this.prisma.slot.findMany({
-      where: provider ? { provider } : {},
+      where: {
+        ...provider ? { provider } : {},
+        endAt: {
+          gt: new Date(),
+        },
+      },
       orderBy: [{ startAt: "asc" }, { id: "asc" }],
       include: {
         bookings: {
@@ -220,14 +225,14 @@ export class BookingRepository {
 
     const afterCursor = decodedCursor
       ? {
-          OR: [
-            { createdAt: { gt: new Date(decodedCursor.createdAt) } },
-            {
-              createdAt: new Date(decodedCursor.createdAt),
-              id: { gt: decodedCursor.id },
-            },
-          ],
-        }
+        OR: [
+          { createdAt: { gt: new Date(decodedCursor.createdAt) } },
+          {
+            createdAt: new Date(decodedCursor.createdAt),
+            id: { gt: decodedCursor.id },
+          },
+        ],
+      }
       : {};
 
     const result = await this.prisma.booking.findMany({
@@ -248,9 +253,9 @@ export class BookingRepository {
       next_cursor:
         hasMore && lastBooking
           ? encodeCursor({
-              createdAt: lastBooking.createdAt.toISOString(),
-              id: lastBooking.id,
-            })
+            createdAt: lastBooking.createdAt.toISOString(),
+            id: lastBooking.id,
+          })
           : null,
     };
   }
@@ -320,11 +325,11 @@ async function checkRateLimit(
   const oldestAttempt = recentAttempts[0]?.attemptedAt;
   const retryAfter = oldestAttempt
     ? Math.max(
-        1,
-        Math.ceil(
-          (oldestAttempt.getTime() + BOOKING_WINDOW_MS - Date.now()) / 1000,
-        ),
-      )
+      1,
+      Math.ceil(
+        (oldestAttempt.getTime() + BOOKING_WINDOW_MS - Date.now()) / 1000,
+      ),
+    )
     : 60;
 
   return { allowed: false, retryAfter };
